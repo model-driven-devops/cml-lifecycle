@@ -17,6 +17,7 @@ with open('definitions/image_definition.json', 'r') as file:
 
 # Update the JSON payload with the environment variables
 if image_name:
+    payload['node_definition_id'] = image_name
     payload['id'] = image_name
     payload['description'] = image_name
     payload['label'] = image_name
