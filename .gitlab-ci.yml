@@ -1,0 +1,116 @@
+stages:
+  - download_to_cml
+  - generate_token
+  - update_definitions
+  - update_topology
+
+
+image: ghcr.io/model-driven-devops/mdd:latest
+
+download_and_convert_image:
+  stage: download_to_cml
+  before_script:
+    - apt-get update && apt-get install -y sshpass openssh-client
+    - apt-get update && apt-get install -y curl qemu-utils
+    - |
+      # Create the .ssh directory if it doesn't already exist
+      mkdir -p ~/.ssh
+      # Ensure permissions are set correctly
+      chmod 700 ~/.ssh
+      # Add the CML remote host's key to known_hosts
+      ssh-keyscan -H $CML_HOST >> ~/.ssh/known_hosts
+  script:
+    - |
+      URL=$IMAGE_URL
+      KEYWORD=$IMAGE_KEYWORD  # Environment variable to specify the keyword like 'amd64'
+      if [ -z "$URL" ]; then
+        echo "IMAGE_URL environment variable is not set."
+        exit 1
+      fi
+      if [ -z "$KEYWORD" ]; then
+        echo "IMAGE_KEYWORD environment variable is not set."
+        exit 1
+      fi
+      echo "Fetching index from $URL"
+      # Fetch the page, parse it for .img file links containing the keyword, and sort them
+      FILE=$(curl -s $URL | grep -o 'href="[^"]*'"$KEYWORD"'[^"]*.img"' | sed 's/href="//;s/"//' | sort -r | head -n 1)
+      if [ -z "$FILE" ]; then
+        echo "No .img file containing $KEYWORD found at $URL."
+        exit 1
+      fi
+
+      # Compare the found file with the currently set environment variable
+      if [ "${FILE%.img}" = "$IMAGE_NAME" ]; then
+          echo "The latest image matches the current IMAGE_NAME in GitLab. Skipping download."
+          exit 0
+      else
+          echo "New image found: $FILE. Proceeding with download and update."
+      fi
+
+      echo "File to download: $FILE"
+      IMG_URL="${URL}${FILE}"
+      echo "Downloading $IMG_URL"
+      curl -O $IMG_URL
+      echo "File downloaded: $FILE"
+      qemu-img convert -f raw -O qcow2 $FILE ${FILE%.img}.qcow2
+      echo "Conversion to QCOW2 completed for ${FILE%.img}.qcow2"
+
+      # Prepare API endpoint URL
+      API_URL="$GITLAB_URL/api/v4/projects/$CI_PROJECT_ID/variables/IMAGE_NAME"
+
+      # Update or create the GitLab environment variable
+      echo "Updating GitLab environment variable with the image name"
+      response=$(curl --silent --output /dev/stderr --write-out "%{http_code}" --request PUT \
+            --header "Content-Type: application/json" \
+            --header "Authorization: Bearer $GITLAB_TOKEN" \
+            --data '{"value": "'"${FILE%.img}"'", "variable_type": "env_var", "protected": true, "masked": false}' \
+            --insecure \
+            "$API_URL")
+
+      echo "Response: $response"
+      if [ "$response" -eq 200 ] || [ "$response" -eq 201 ]; then
+          echo "Variable updated or created successfully."
+      else
+          echo "Failed with status $response, unexpected error occurred."
+      fi
+
+      # Add new image to CML
+      sshpass -p $CML_PASSWORD scp ${FILE%.img}.qcow2 $CML_USERNAME@$CML_HOST:/
+      if [ $? -eq 0 ]; then
+        echo "File successfully uploaded via SCP"
+      else
+        echo "SCP upload failed"
+      fi
+      echo ${FILE%.img}.qcow2 > ${FILE%.img}.txt
+      # Check if file was created
+      if [ -f ${FILE%.img}.txt ]; then
+        echo "TXT file created: ${FILE%.img}.txt"
+      else
+        echo "Failed to create TXT file"
+      fi
+  artifacts:
+    paths:
+      - "*.txt"
+
+generate_cml_api_token:
+  stage: generate_token
+  script:
+    - python3 scripts/token_generation.py
+  dependencies:
+    - download_and_convert_image
+
+update_node_and_image_definitions:
+  stage: update_definitions
+  script:
+    - python3 scripts/node_definition.py
+    - python3 scripts/image_definition.py
+  dependencies:
+    - generate_cml_api_token
+
+update_cml_topology_and_nodes:
+  stage: update_topology
+  script:
+    - python3 scripts/update_nodes.py
+  dependencies:
+    - update_node_and_image_definitions
+      
