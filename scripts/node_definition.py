@@ -1,18 +1,33 @@
 import json
 import os
 import requests
+import sys  # Needed for exiting the script early
 from urllib3.exceptions import InsecureRequestWarning
 
 # Disable warnings about insecure requests (for HTTPS with verify=False)
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
+# Environment Variables Check
+required_env_vars = ['CML_URL', 'API_TOKEN', 'NODE_DEFINITION']
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    print(f"Missing required environment variables: {', '.join(missing_vars)}")
+    sys.exit(1)
+
 # Retrieve environment variables
-cml_url = os.getenv('CML_URL')  # Default value if not set
-api_token = os.getenv('API_TOKEN')  # Default value for safety in non-production environments
+cml_url = os.getenv('CML_URL')
+api_token = os.getenv('API_TOKEN')
+node_definition = os.getenv('NODE_DEFINITION')
 
 # Load and update the JSON payload
 with open('definitions/node_definition.json', 'r') as file:
     payload = json.load(file)
+
+# Update the node definition based on environment variable
+payload['id'] = node_definition
+payload['general']['description'] = node_definition
+payload['ui']['label'] = node_definition
+payload['ui']['label_prefix'] = f"{node_definition}-"
 
 # Prepare headers and URL for the API request
 headers = {
