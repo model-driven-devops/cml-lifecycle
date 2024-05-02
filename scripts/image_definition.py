@@ -10,6 +10,7 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 cml_url = os.getenv('CML_URL')  # Default value if not set
 api_token = os.getenv('API_TOKEN')  # Default value for safety in non-production environments
 image_name = os.getenv('IMAGE_NAME')  # Retrieve the IMAGE_NAME environment variable set in GitLab CI
+node_definition = os.getenv('NODE_DEFINITION')
 
 # Read and modify the JSON payload
 with open('definitions/image_definition.json', 'r') as file:
@@ -17,7 +18,7 @@ with open('definitions/image_definition.json', 'r') as file:
 
 # Update the JSON payload with the environment variables
 if image_name:
-    payload['node_definition_id'] = image_name
+    payload['node_definition_id'] = node_definition
     payload['id'] = image_name
     payload['description'] = image_name
     payload['label'] = image_name
