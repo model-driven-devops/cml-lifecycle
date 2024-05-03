@@ -9,6 +9,13 @@ The intention of this repository is to support the testing of nightly built soft
 - Finds user defined topology, identifies correct nodes, and assigns the new image definition.
 - Restarts the nodes.
 
+## Gotchas
+- CML seems to only accept image definitions with images that are over 1 GB in size. I first attempted this using Tiny Core Linux and ran into an error when attempting to update the image definition. The qcow file was 32 MB, but CML read it as 32 GB.
+  
+## Running Workflow in Jenkins
+
+## Running Workflow in Gitlab
+
 ## Setting your Environment Variables
 
 The scripts in this repository can be executed manually or as an automated pipeline. Included in this repository is a pre-built gitlab-ci.yml file that will work by setting your appropirate environment variables.
