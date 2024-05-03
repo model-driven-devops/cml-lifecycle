@@ -4,6 +4,7 @@ This section assumes you do not have access to source control and would like to 
 
 ## Plugin Requirements
 - <b>Managed Files Plugin:</b> Stores the node and image definition json templates.
+- <b>Config File Provider Plugin:</b> Feeds the .json templates into your groovy script.
 - <b>httpRequest Plugin:</b> Used to send payloads to CML.
 - <b>readJSON and writeJSON:</b> Pretty straight forward. Needed to read and write JSON.
 
