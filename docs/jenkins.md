@@ -24,5 +24,6 @@ You can copy the JSON from the file in this repository under the definitions fol
 Do the same thing for the node_defintion.json file.
 ![Screenshot 2024-05-03 at 9 32 50 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/8a1816ca-a719-48b0-8564-c2896b1f8cc0)
 
-You should have both of your definition files uploaded and accessible to your pipleine now.
+You should have both of your definition files uploaded and accessible to your pipleine now. Take note of the IDs for each file. We need to reference them in our pipeline later.
 ![Screenshot 2024-05-03 at 9 33 52 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/dc778fe5-115f-43bd-a8a9-79a2fa236d6f)
+![Screenshot 2024-05-03 at 10 49 13 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/e0e5c165-eb90-451a-a059-8c0fff1159d1)
