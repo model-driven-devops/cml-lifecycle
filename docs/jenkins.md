@@ -10,7 +10,10 @@ This section assumes you do not have access to source control and would like to 
 
 ## Backlog Items
 These are items that will be updated once primary workflow is completed:
+
 -<b> Only update nodes that are not running current image release </b> - Current pipeline targets, stops, wipes, and updates all nodes matching user input node name.
+-<b> Config backup or extraction </b> - Backup current config and store it using the managed files plugin or as an archieve item. When new image is booted up, apply previous config. Second option - basline config is always stored externally and applied to new node. 
+
 
 ## Adding Definition Files to Jenkins
 
