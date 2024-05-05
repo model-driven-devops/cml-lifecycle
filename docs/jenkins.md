@@ -8,6 +8,10 @@ This section assumes you do not have access to source control and would like to 
 - <b>httpRequest Plugin:</b> Used to send payloads to CML.
 - <b>readJSON and writeJSON:</b> Pretty straight forward. Needed to read and write JSON.
 
+## Backlog Items
+These are items that will be updated once primary workflow is completed:
+-<b> Only update nodes that are not running current image release </b> - Current pipeline targets, stops, wipes, and updates all nodes matching user input node name.
+
 ## Adding Definition Files to Jenkins
 
 If you haven't installed the Managed Files plugin, go to Manage Jenkins -> Plugins -> Available Plugins and install it. If you cannot use the Managed Files plugin, this is only being used to pass two JSON files into our pipeline in order to update the node and image definitions in CML. You can store these just about anywhere for Jenkins to access, or you can modify the scripts in the JenkinsFile to generate the properly formatted Payload.
