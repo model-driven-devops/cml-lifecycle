@@ -5,8 +5,10 @@ This section assumes you do not have access to source control and would like to 
 ## Plugin Requirements
 - <b>Managed Files Plugin:</b> Stores the node and image definition json templates.
 - <b>Config File Provider Plugin:</b> Feeds the .json templates into your groovy script.
+- <b>Credentials Binding Plugin and Credentials Plugin:</b> These will allow us to pass our credentials safely between pipelines and stages.
+- <b>Environmental Injector Plugin:</b> Allows us to set build related variables.
 - <b>httpRequest Plugin:</b> Used to send payloads to CML.
-- <b>readJSON and writeJSON:</b> Pretty straight forward. Needed to read and write JSON.
+- <b>Pipeline Utility Steps:</b> Includes the read and write json plugins.
 
 ## Backlog Items
 These are items that will be updated once primary workflow is completed:
