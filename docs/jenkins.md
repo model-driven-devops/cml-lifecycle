@@ -36,8 +36,15 @@ You can set these by navigating to Manage Jenkins -> System. Then select System 
 
 ![Screenshot 2024-05-06 at 4 40 02 PM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/7790bc05-e415-48c0-999f-3ecdd8a1a43d)
 
-- 
-  
+Next, we want to generate our API token to be used to call Jenkins. Select your username in the top right corner. Under API token, select Add New Token and generate a token associated with your username.
+
+![Screenshot 2024-05-06 at 4 47 06 PM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/0028b80c-c9f7-488a-be3c-426da61d6250)
+
+Copy your token someplace safe. Navigate back to Manage Jenkins -> Credentials -> System -> Global Credentials and select "Add Credentials" again. Go ahead and select Usernamd and Password as the Kind. This time you are going to use your Jenkins username as the username and your token will be your password. Make sure you make the ID "jenkins-api-token". This ID will be referenced in the pipeline.
+
+![Screenshot 2024-05-06 at 4 50 43 PM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/20356b5c-9aa4-4793-acdc-f7bdb173e3eb)
+
+
 ## Adding Definition Files to Jenkins
 
 If you haven't installed the Managed Files plugin, go to Manage Jenkins -> Plugins -> Available Plugins and install it. If you cannot use the Managed Files plugin, this is only being used to pass two JSON files into our pipeline in order to update the node and image definitions in CML. You can store these just about anywhere for Jenkins to access, or you can modify the scripts in the JenkinsFile to generate the properly formatted Payload.
