@@ -14,6 +14,7 @@ These are items that will be updated once primary workflow is completed:
 - <b> Only update nodes that are not running current image release</b> - Current pipeline targets, stops, wipes, and updates all nodes matching user input node name.
 - <b> Config backup or extraction </b> - Backup current config and store it using the managed files plugin or as an archieve item. When new image is booted up, apply previous config. Second option - basline config is always stored externally and applied to new node.
 - <b> Image Type Check </b> - Add logic to check if image is already available as a .qcow2 or a .img for easy conversion. If not, proceed with .iso to .qcow2 converstion. This will give any users the ability to still use the pipeline even if they need to manually convert the .iso.
+- <b> Clean Up Error Checks and Comments </b>
 
 ## Required Environment Variables
 To successfully execute this pipeline, you will need to set the following Jenkins environment variables:
