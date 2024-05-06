@@ -14,7 +14,15 @@ These are items that will be updated once primary workflow is completed:
 - <b> Only update nodes that are not running current image release</b> - Current pipeline targets, stops, wipes, and updates all nodes matching user input node name.
 - <b> Config backup or extraction </b> - Backup current config and store it using the managed files plugin or as an archieve item. When new image is booted up, apply previous config. Second option - basline config is always stored externally and applied to new node. 
 
+## Required Environment Variables
+To successfully execute this pipeline, you will need to set the following Jenkins environment variables:
 
+- <b> CML_HOST: </b> This will be the IP address of your CML server. We will use this to SCP the .qcow2 image onto the server.
+- <b> CML_LAB: </b> This is the name of your existing lab that you want to target for the node updates.
+- <b> CML_URL: </b> This is the https://cml-address of your CML server that will be used for API calls.
+- <b> NODE_DEFINITION: </b> This is the name of your node that we will target.
+- <b> IMAGE_DEFINITION_STORAGE: </b> This is an interger that will be used to clean up the images. This will be the number of images assigned to your specified node at any given time. For example, If you set it to 4, when the 5th image is uploaded, it will delete the 1st image.
+  
 ## Adding Definition Files to Jenkins
 
 If you haven't installed the Managed Files plugin, go to Manage Jenkins -> Plugins -> Available Plugins and install it. If you cannot use the Managed Files plugin, this is only being used to pass two JSON files into our pipeline in order to update the node and image definitions in CML. You can store these just about anywhere for Jenkins to access, or you can modify the scripts in the JenkinsFile to generate the properly formatted Payload.
