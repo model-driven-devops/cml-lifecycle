@@ -28,10 +28,15 @@ To successfully execute this pipeline, you will need to set the following Jenkin
 - <b> IMAGE_DEFINITION_STORAGE: </b> This is an interger that will be used to clean up the images. This will be the number of images assigned to your specified node at any given time. For example, If you set it to 4, when the 5th image is uploaded, it will delete the 1st image.
 - <b> JENKINS_URL: </b> Seems silly, but to avoid more plugins, we are primarily using CURL commands to make API calls. This will be used to check artifacts in other pipelines.
 
-You can set these by navigating to Manage Jenkins -> System.
-
 ## Setting Credentials
 
+You will also need to set required credentials that will be used to authenticate against both Jenkins and CML. To avoid using additional plugins, this pipeline interacts with both Jenkins and CML using CURL. You will need the following set under Manage Jenkins -> Credentials.
+
+You can set these by navigating to Manage Jenkins -> System. Then select System -> Global Credentials. Select "Add Credentials" in the top right corner. Select Username with Password and (You guessed it!) enter your CML username and password. use the ID "cml_credentials". The scripts in the pipeline reference this ID.
+
+![Screenshot 2024-05-06 at 4 40 02 PM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/7790bc05-e415-48c0-999f-3ecdd8a1a43d)
+
+- 
   
 ## Adding Definition Files to Jenkins
 
