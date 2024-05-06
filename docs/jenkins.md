@@ -26,6 +26,12 @@ To successfully execute this pipeline, you will need to set the following Jenkin
 - <b> CML_URL: </b> This is the https://cml-address of your CML server that will be used for API calls.
 - <b> NODE_DEFINITION: </b> This is the name of your node that we will target.
 - <b> IMAGE_DEFINITION_STORAGE: </b> This is an interger that will be used to clean up the images. This will be the number of images assigned to your specified node at any given time. For example, If you set it to 4, when the 5th image is uploaded, it will delete the 1st image.
+- <b> JENKINS_URL: </b> Seems silly, but to avoid more plugins, we are primarily using CURL commands to make API calls. This will be used to check artifacts in other pipelines.
+
+You can set these by navigating to Manage Jenkins -> System.
+
+## Setting Credentials
+
   
 ## Adding Definition Files to Jenkins
 
