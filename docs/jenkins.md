@@ -63,4 +63,6 @@ Do the same thing for the node_defintion.json file.
 
 You should have both of your definition files uploaded and accessible to your pipleine now. Take note of the IDs for each file. We need to reference them in our pipeline later.
 ![Screenshot 2024-05-03 at 9 33 52 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/dc778fe5-115f-43bd-a8a9-79a2fa236d6f)
+
+## Preparing the Pipeline
 ![Screenshot 2024-05-03 at 10 49 13 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/e0e5c165-eb90-451a-a059-8c0fff1159d1)
