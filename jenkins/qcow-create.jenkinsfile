@@ -1,0 +1,63 @@
+pipeline {
+  agent any
+	environment {
+  	QCOW2_URL = 'https://cloud-images.ubuntu.com/daily/server/jammy/20240403/jammy-server-cloudimg-amd64-disk-kvm.img'
+	}
+  stages {
+    // This initial stage looks for an artifact titled archive_record.csv. This file keeps a running list of images created.
+		// This list is used to set the next version number when an image is created and it will be used to clean CML in later stages.
+		stage('Prepare Environment') {
+			steps {
+				script {
+						// Use credentials to fetch artifact_record from archive using API
+						withCredentials([usernamePassword(credentialsId: 'jenkins-api-token', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN')]) {
+								def jenkinsUrl = "http://10.188.13.40:8080/job/qcow-create/lastSuccessfulBuild/artifact/artifact_record.csv"
+								sh "curl -u $JENKINS_USER:$JENKINS_TOKEN -s -o artifact_record.csv $jenkinsUrl"
+						}
+
+						// Check for the last version number in the downloaded CSV
+						if (fileExists('artifact_record.csv')) {
+								def lastLine = readFile('artifact_record.csv').readLines().last()
+								def lastVersion = lastLine.split(',')[0].replaceAll("[^\\d]", "").toInteger()
+								env.VERSION_NUMBER = "${lastVersion + 1}"
+						} else {
+								env.VERSION_NUMBER = "1"
+								writeFile file: 'artifact_record.csv', text: "version, filename, timestamp\n"
+						}
+        	}
+      }
+    }
+
+		// This stage will simply download a .img file and convert it to .qcow2. Once converted, it will name it and add the updated version number. 
+		stage('Download and Convert Image') {
+				steps {
+						script {
+								// Download the image
+								sh "curl -L ${QCOW2_URL} -o ${NODE_DEFINITION}-${env.VERSION_NUMBER}.img"
+								// Convert to QCOW2 format
+								sh "qemu-img convert -O qcow2 ${NODE_DEFINITION}-${env.VERSION_NUMBER}.img ${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2"
+						}
+				}
+		}
+
+		// This stage will update the artifact_record.csv with the most recent version.
+		stage('Update Artifact Record and Archive') {
+			steps {
+					script {
+							def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+							def newLine = "${NODE_DEFINITION}-v${env.VERSION_NUMBER},${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2,${timestamp}\n"
+							def existingContent = readFile('artifact_record.csv')
+							writeFile file: 'artifact_record.csv', text: existingContent + newLine
+
+							archiveArtifacts artifacts: "${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2,artifact_record.csv", onlyIfSuccessful: true
+					}
+			}
+	}
+}
+
+	post {
+			always {
+					cleanWs(notFailBuild: true)
+			}
+	}
+}
