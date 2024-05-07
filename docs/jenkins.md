@@ -65,4 +65,18 @@ You should have both of your definition files uploaded and accessible to your pi
 ![Screenshot 2024-05-03 at 9 33 52 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/dc778fe5-115f-43bd-a8a9-79a2fa236d6f)
 
 ## Preparing the Pipeline
+
+Alright, so we have our environment variables set and we are ready to get our pipeline set up. First thing we need to do is grab our Jenkins files from this repository and copy them into Jenkins. There are three jenkins files and three different pipelines:
+
+- <b> qcow-create.jenkinsfile </b>: This is a work in progress, but this pipeline will be responsible for preparing your .qcow image that will be uploaded to CML and used with your new image definition. In its current state, you provide it an environment variable with the URL of your software repository. You can hardcode it or set it externally, but the pipeline will need some mechanism to download the initial image before converting it to a format compatible with CML. Once the image is converted into the proper format, it will be stored as an artifact in Jenkins for access during the other pipeline phases. This pipeline also keeps a running list of each build with a timestamp that will be used for cleaning up CML.
+- <b> cml-image-update.jenkinsfile <b>: This pipeline can run nightly or can be set to trigger based on the qcow-create pipeline successfully completing. It will check the Jenkins artifacts for an updated .qcow2 file, upload it to your CML server, make any requested updates to the node definition, push a new image definition using the new .qcow2 file and attach it to the node definition, find your topology, and update the requested nodes with the new image.
+- <b> cml-node-cleanup.jenkinsfile </b>: This pipeline allows the user to set an environment variable that will maintain a fixed number of new images on the CML server at any given time. For example, if you request 4 and a 5th image is uploaded, it will use the Jenkins artifiact from the qcow-create pipeline to identify the oldest image and remove it from CML. If there is an issue with the artifact_record file, it will fall back on deleting the oldest version.
+
+### cml-qcow-create.jenkinsfile
+
+### cml-image-update.jenkinsfile
+
+### cml-node-cleanup.jenkinsfile
+
+
 ![Screenshot 2024-05-03 at 10 49 13 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/e0e5c165-eb90-451a-a059-8c0fff1159d1)
