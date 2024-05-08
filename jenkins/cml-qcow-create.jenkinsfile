@@ -1,0 +1,81 @@
+pipeline {
+  agent any
+    stages {
+        stage('Prepare Environment') {
+            steps {
+                script {
+                    // Ensure IMAGE_URL and IMAGE_KEYWORD are set
+                    if (!env.IMAGE_URL) {
+                        error "IMAGE_URL environment variable is not set."
+                    }
+                    if (!env.IMAGE_KEYWORD) {
+                        error "IMAGE_KEYWORD environment variable is not set."
+                    }
+
+                    echo "Fetching index from $env.IMAGE_URL"
+                    // Fetch the page, parse it for .img file links containing the keyword, and sort them
+                    def file = sh(script: """
+                        curl -s $IMAGE_URL | grep -o 'href="[^"]*'$IMAGE_KEYWORD'[^"]*.img"' | sed 's/href="//;s/"//' | sort -r | head -n 1
+                    """, returnStdout: true).trim()
+
+                    if (!file) {
+                        error "No .img file containing $IMAGE_KEYWORD found at $IMAGE_URL."
+                    }
+
+                    // Compare the found file with the currently set environment variable
+                    if (file == env.IMAGE_NAME) {
+                        echo "The latest image matches the current IMAGE_NAME in Jenkins. Skipping download."
+                        currentBuild.result = 'SUCCESS'
+                        return
+                    } else {
+                        echo "New image found: $file. Proceeding with download and update."
+                        env.IMAGE_NAME = file
+                    }
+
+                    // Use credentials to securely fetch the artifact record
+                    withCredentials([usernamePassword(credentialsId: 'jenkins-api-token', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN')]) {
+                        def jenkinsUrl = "${JENKINS_URL}/job/cml-qcow-create/lastSuccessfulBuild/artifact/artifact_record.csv"
+                        sh "curl -u $JENKINS_USER:$JENKINS_TOKEN -s -o artifact_record.csv $jenkinsUrl"
+                    }
+
+                    // Check for the last version number in the downloaded CSV
+                    if (fileExists('artifact_record.csv')) {
+                        def lastLine = readFile('artifact_record.csv').readLines().last()
+                        def lastVersion = lastLine.split(',')[0].replaceAll("[^\\d]", "").toInteger()
+                        env.VERSION_NUMBER = "${lastVersion + 1}"
+                    } else {
+                        env.VERSION_NUMBER = "1"
+                        writeFile file: 'artifact_record.csv', text: "version, filename, timestamp\n"
+                    }
+                }
+            }
+        }
+        stage('Download and Convert Image') {
+            steps {
+                script {
+                    // Download the image
+                    sh "curl -L ${QCOW2_URL} -o ${NODE_DEFINITION}-${env.VERSION_NUMBER}.img"
+                    // Convert to QCOW2 format
+                    sh "qemu-img convert -O qcow2 ${NODE_DEFINITION}-${env.VERSION_NUMBER}.img ${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2"
+                }
+            }
+        }
+        stage('Update Artifact Record and Archive') {
+            steps {
+                script {
+                    def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+                    def newLine = "${NODE_DEFINITION}-v${env.VERSION_NUMBER},${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2,${timestamp}\n"
+                    def existingContent = readFile('artifact_record.csv')
+                    writeFile file: 'artifact_record.csv', text: existingContent + newLine
+
+                    archiveArtifacts artifacts: "${NODE_DEFINITION}-v${env.VERSION_NUMBER}.qcow2,artifact_record.csv", onlyIfSuccessful: true
+                }
+            }
+        }
+    }
+    post {
+        always {
+            cleanWs(notFailBuild: true)
+        }
+    }
+}
