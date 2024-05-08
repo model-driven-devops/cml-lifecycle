@@ -91,6 +91,10 @@ If you have defined your IMAGE_URL and IMAGE_KEYWORD variables, you should be ab
 
 ### cml-image-update.jenkinsfile
 
+For this next pipeline, we will follow the same process. Add a new item in your dashboard, name it cml-image-update, select Pipeline and select OK. Copy the script from the cml-image-update.jenkinsfile in this repo, right into the Script box and select okay. Assuming your credentials and environment variables are correct, and your cml-qcow-create pipeline has successfully posted an artifact, you can go ahead and run the pipeline. 
+
+
+
 ### cml-node-cleanup.jenkinsfile
 
 
