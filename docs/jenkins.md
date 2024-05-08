@@ -98,12 +98,12 @@ When you copy the script over, you will notice the "environment" block has IMAGE
 ```
 pipeline {
   agent {  
-		agent any
+    agent any
   }
 
   environment {
       IMAGE_DEF_ID = 'insert your ID here'  // ID of the managed image file
-	    NODE_DEF_ID = 'insert your ID here'  // ID of the managed node file
+      NODE_DEF_ID = 'insert your ID here'  // ID of the managed node file
     }
 ```
 
