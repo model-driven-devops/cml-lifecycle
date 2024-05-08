@@ -120,6 +120,11 @@ Once you run this pipeline, it will execute the following workflow:
 (placeholder for CML screenshots)
 
 ### cml-node-cleanup.jenkinsfile
+This final pipeline will be responsible for keeping CML cleaned up. Follow the same instructions as previously mentioned, but create the cml-node-cleanup pipeline and copy and paste the script. This script is depends on your IMAGE_NODE_STORAGE environment variable. This variable defines how many images you want stored in CML and any given time. When you run this pipeline, it will do the following:
+
+- It will pull the .csv artifiact that was created in the .qcow create pipeline to get a list of all generated images and their timestamp. Using the IMAGE_NODE_STORAGE variable, it will identify the oldest images.
+- It will query CML to see if any of the images from the .csv match what is running in CML. If the number of images in CML is less than the IMAGE_NODE_STORAGE variable, it will skip this process.
+- Once it identifies matching images, it will target them for deletion. It will delete the image definition first, followed up the image itself.
+- It will update another .csv each time an image is deleted.
 
 
-![Screenshot 2024-05-03 at 10 49 13 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/e0e5c165-eb90-451a-a059-8c0fff1159d1)
