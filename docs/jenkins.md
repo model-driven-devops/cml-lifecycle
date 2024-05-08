@@ -27,6 +27,8 @@ To successfully execute this pipeline, you will need to set the following Jenkin
 - <b> NODE_DEFINITION: </b> This is the name of your node that we will target.
 - <b> IMAGE_DEFINITION_STORAGE: </b> This is an interger that will be used to clean up the images. This will be the number of images assigned to your specified node at any given time. For example, If you set it to 4, when the 5th image is uploaded, it will delete the 1st image.
 - <b> JENKINS_URL: </b> Seems silly, but to avoid more plugins, we are primarily using CURL commands to make API calls. This will be used to check artifacts in other pipelines.
+- <b> IMAGE_URL: </b> This is the URL where your .img is posted. We are testing with an ubuntu build URL - https://cloud-images.ubuntu.com/daily/server/jammy/20240403/
+- <b> IMAGE_KEYWORD: </b> This will be used to help identify any keyword you may need to grab the right .img file. For example, we want to download the ubuntu image for amd64.
 
 ## Setting Credentials
 
@@ -73,6 +75,9 @@ Alright, so we have our environment variables set and we are ready to get our pi
 - <b> cml-node-cleanup.jenkinsfile </b>: This pipeline allows the user to set an environment variable that will maintain a fixed number of new images on the CML server at any given time. For example, if you request 4 and a 5th image is uploaded, it will use the Jenkins artifiact from the qcow-create pipeline to identify the oldest image and remove it from CML. If there is an issue with the artifact_record file, it will fall back on deleting the oldest version.
 
 ### cml-qcow-create.jenkinsfile
+This is currently under development. Right now, this pipeline will allow you to define a link in the script that points to a .img or .qcow2 file that already exists. It will download it, if it's a .img it will convert it to the proper format, name it, version it, and upload it as an artifact in Jenkins for retrival by the other pipelines. 
+
+To define a different .img file, 
 
 ### cml-image-update.jenkinsfile
 
