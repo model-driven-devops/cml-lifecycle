@@ -106,6 +106,18 @@ pipeline {
       NODE_DEF_ID = 'insert your ID here'  // ID of the managed node file
     }
 ```
+Once you run this pipeline, it will execute the following workflow:
+- Install any dependencies on the agent.
+- Generate a auth token for CML.
+- Check if there is matching qcow image that already exists on the CML server. If it doesn't, then it will proceed to download the artifact from the previous pipeline and upload it to CML.
+- Create/update your node definition.
+- Create/update your image definition.
+- Identify your selected lab.
+- Identify the nodes based on the node definition..
+- If the node is running the most current version of software, it will be skipped.
+- If the node is running an older version of software, it will be stopped, wiped, updated, and started.
+
+(placeholder for CML screenshots)
 
 ### cml-node-cleanup.jenkinsfile
 
