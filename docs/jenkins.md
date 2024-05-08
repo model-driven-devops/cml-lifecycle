@@ -93,7 +93,19 @@ If you have defined your IMAGE_URL and IMAGE_KEYWORD variables, you should be ab
 
 For this next pipeline, we will follow the same process. Add a new item in your dashboard, name it cml-image-update, select Pipeline and select OK. Copy the script from the cml-image-update.jenkinsfile in this repo, right into the Script box and select okay. Assuming your credentials and environment variables are correct, and your cml-qcow-create pipeline has successfully posted an artifact, you can go ahead and run the pipeline. 
 
+When you copy the script over, you will notice the "environment" block has IMAGE_DEF_ID and NODE_DEF_ID with the note to 'insert your ID here'. This is where we are going to use the IDs from the document plugin to grab your image and node definition templates. Go ahead and paste those IDs in.
 
+```
+pipeline {
+  agent {  
+		agent any
+  }
+
+  environment {
+      IMAGE_DEF_ID = 'insert your ID here'  // ID of the managed image file
+	    NODE_DEF_ID = 'insert your ID here'  // ID of the managed node file
+    }
+```
 
 ### cml-node-cleanup.jenkinsfile
 
