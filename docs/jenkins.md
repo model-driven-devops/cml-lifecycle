@@ -80,6 +80,15 @@ This is currently under development. Right now, this pipeline will allow you to 
 In your Jenkins dashboard, select New Item and name it cml-qcow-create. The names are important because the pipelines all work together, so make sure you name it correctly. Select "Pipeline" and "OK".
 
 ![Screenshot 2024-05-08 at 9 29 22 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/d21dc528-baf2-4594-bb35-52a02e369cee)
+
+Under Advanced Project Options, you will see an area to insert a script under the "Pipeline" heading. The definition is Pipeline Script. Copy and paste the code from the cml-qcow-create.jenkinsfile in this repository right into the Script box and click save.
+
+![Screenshot 2024-05-08 at 9 33 04 AM](https://github.com/model-driven-devops/cml-lifecycle/assets/65776483/5fee975d-e574-49f3-b12f-f1ea40b2615e)
+
+If you have defined your IMAGE_URL and IMAGE_KEYWORD variables, you should be able to run the script with no issues. Once it completes, you will see to artifacts produced. "artifact_record.csv" and a .qcow2 file with the name of your defined node plus a version numbe starting at 1. If you select "view" on the artifact_record.csv, you will notice this file is tracking each build. This file will be used later when we run the cml-cleanup pipeline.
+
+(placeholder for screenshot)
+
 ### cml-image-update.jenkinsfile
 
 ### cml-node-cleanup.jenkinsfile
