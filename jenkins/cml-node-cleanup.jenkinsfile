@@ -1,0 +1,166 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Retrieve and Use API Token') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'cml_credentials', usernameVariable: 'CML_USERNAME', passwordVariable: 'CML_PASSWORD')]) {
+                        echo "Executing curl command to retrieve API token..."
+                        def commandRetrieve = "curl -k -s -X POST \"${CML_URL}/api/v0/authenticate\" " +
+                                              "-H \"Content-Type: application/json\" " +
+                                              "-d '{\"username\": \"${CML_USERNAME}\", \"password\": \"${CML_PASSWORD}\"}'"
+                        def token = sh(script: commandRetrieve, returnStdout: true).trim()
+                
+                        if (token == '' || token.contains('Error') || token.startsWith('null')) {
+                            error "Failed to retrieve API token: ${token}"
+                        } else {
+                            echo "API Token retrieved successfully: ${token}"
+                            // Remove quotes and update the environment variable
+                            env.API_TOKEN = token.replaceAll('\"', '')
+                            writeFile file: 'token.txt', text: "API Token: ${env.API_TOKEN}"
+        
+                            // Using the API token to make a test API call
+                            echo "Using API token to make an authenticated API call..."
+                            def commandUseToken = "curl -k -X GET ${CML_URL}/api/v0/authok " +
+                                                  "-H 'accept: application/json' " +
+                                                  "-H 'Authorization: Bearer ${env.API_TOKEN}' " +
+                                                  "-o response.json"
+                            sh script: commandUseToken
+                            echo "Response from API call:"
+                            sh "cat response.json"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Fetch Artifacts from QCOW-Create Project') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'jenkins-api-token', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN')]) {
+                        def csvURL = "${JENKINS_URL}/job/cml-qcow-create/lastSuccessfulBuild/artifact/artifact_record.csv"
+                        def csvFile = 'artifact_record.csv'
+                        sh "curl -u ${JENKINS_USER}:${JENKINS_TOKEN} -s '${csvURL}' -o ${csvFile}"
+
+                        def csvContent = readFile(csvFile).trim().split('\n')
+                        def artifacts = csvContent.collect { line ->
+                            def parts = line.split(',')
+                            return [version: parts[0], fileName: parts[1], timestamp: parts[2]]
+                        }
+                        artifacts.sort { a, b -> a.timestamp <=> b.timestamp }
+
+                        echo "Sorted list of images in the artifact_record.csv:"
+                        artifacts.each {
+                            echo "Version: ${it.version}, File: ${it.fileName}, Timestamp: ${it.timestamp}"
+                        }
+
+                        def imageNodeStorage = "${env.IMAGE_NODE_STORAGE}".toInteger()
+                        if (artifacts.size() > imageNodeStorage) {
+                            def excessImages = artifacts.take(artifacts.size() - imageNodeStorage)
+                            echo "Identifying images to potentially remove:"
+                            excessImages.each {
+                                echo "Excess Image: Version: ${it.version}, File: ${it.fileName}, Timestamp: ${it.timestamp}"
+                            }
+                            env.EXCESS_IMAGES = excessImages.collect { it.fileName }.join(",")
+                        } else {
+                            echo "No excess images. All images are within the storage limit."
+                        }
+                    }
+                }
+            }
+        }
+
+            stage('Fetch Image Definitions from CML') {
+            steps {
+                script {
+                    echo "Fetching image definitions from CML..."
+                    def imagesJson = sh(script: """
+                        curl -k -s -X GET '${env.CML_URL}/api/v0/node_definitions/${env.NODE_DEFINITION}/image_definitions' \\
+                        -H 'Content-Type: application/json' \\
+                        -H 'Authorization: Bearer ${env.API_TOKEN}'
+                    """, returnStdout: true).trim()
+                    echo "Raw JSON response from CML server:"
+                    echo imagesJson
+
+                    def images = readJSON text: imagesJson
+                    def cmlImageIds = images.collect { it.id }
+
+                    echo "CML Image IDs:"
+                    cmlImageIds.each {
+                        echo it
+                    }
+
+                    // Assume excessImages contains the IDs of images potentially to be removed
+                    def excessImageFiles = env.EXCESS_IMAGES.split(",")
+                    def excessImageIds = excessImageFiles.collect { it.replaceAll(/\.qcow2$/, '') }
+                    def imagesForDeletion = []
+
+                    echo "Excess Image IDs marked for potential removal:"
+                    excessImageIds.each {
+                        echo it
+                    }
+
+                    // Find and print out images that should be marked for deletion
+                    cmlImageIds.intersect(excessImageIds).each {
+                        imagesForDeletion.add(it)
+                        echo "Image marked for deletion: $it"
+                    }
+
+                    // Additional logic here to handle the deletion process
+                    if (imagesForDeletion.size() > 0) {
+                        def deletionsCsv = 'deletions.csv'
+                        def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+
+                        // Fetch the existing deletions.csv from archive if it exists
+                        if (fileExists(deletionsCsv)) {
+                            def deletionsCsvUrl = "${JENKINS_URL}/job/cml-qcow-create/lastSuccessfulBuild/artifact/deletions.csv"
+                            sh "curl -u ${JENKINS_USER}:${JENKINS_TOKEN} -s '${deletionsCsvUrl}' -o ${deletionsCsv}"
+                        }
+
+                        if (!fileExists(deletionsCsv)) {
+                            writeFile file: deletionsCsv, text: "image_name, qcow2_file, timestamp\n"
+                        }
+
+                        imagesForDeletion.each { imageId ->
+                            echo "Processing deletion for image ID: $imageId"
+                            
+                            // Delete the image definition
+                            def deleteImageDefCommand = """
+                                curl -k -s -X DELETE '${env.CML_URL}/api/v0/image_definitions/${imageId}' \\
+                                -H 'Authorization: Bearer ${env.API_TOKEN}'
+                            """
+                            sh script: deleteImageDefCommand
+
+                            // Find the corresponding QCOW2 file for deletion
+                            def qcow2File = excessImageFiles.find { it.startsWith(imageId) }
+                            
+                            // Delete the QCOW2 image
+                            def deleteQcow2Command = """
+                                curl -k -s -X DELETE '${env.CML_URL}/api/v0/images/manage/${qcow2File}' \\
+                                -H 'accept: application/json' \\
+                                -H 'Authorization: Bearer ${env.API_TOKEN}'
+                            """
+                            sh script: deleteQcow2Command
+
+                            // Append the deletion record to the CSV file
+                            def newDeletionLine = "${imageId}, ${qcow2File}, ${timestamp}\n"
+                            writeFile file: deletionsCsv, text: readFile(deletionsCsv) + newDeletionLine
+                        }
+
+                        // Archive the deletions CSV
+                        archiveArtifacts artifacts: deletionsCsv
+                    } else {
+                        echo "No matching images found for deletion."
+                    }
+                }
+            }
+        }
+        
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+    }
+}
