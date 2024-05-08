@@ -1,0 +1,387 @@
+pipeline {
+  agent {  
+		agent any
+  }
+
+  environment {
+      IMAGE_DEF_ID = 'insert your ID here'  // ID of the managed image file
+	    NODE_DEF_ID = 'insert your ID here'  // ID of the managed node file
+    }
+
+
+stages {
+  // Initial phase to check dependencies and install anything that is missing. Python is not required, but I am leaving this here
+	// as a placeholder for other requirements.
+	stage('Check and Install Dependencies') {
+    steps {
+      script {
+				sh """
+				if ! command -v python3 &>/dev/null; then
+						echo 'Python 3 is not installed. Installing Python 3...'
+						sudo apt-get update
+						sudo apt-get install -y python3
+				else
+						echo 'Python 3 is already installed.'
+						python3 --version
+				fi
+
+				if [ ! -e /usr/bin/python ]; then
+						echo 'Creating symlink for python...'
+						sudo ln -s /usr/bin/python3 /usr/bin/python
+				else
+						echo 'Symlink or python executable already exists at /usr/bin/python.'
+						python --version
+				fi
+				"""
+      }
+    }
+	}
+    
+  // This stage will use your CML credentials to generate a bearer token for future API calls.
+  stage('Retrieve and Use API Token') {
+    steps {
+      script {
+				// Grab credentials from Jenkins
+				withCredentials([usernamePassword(credentialsId: 'cml_credentials', usernameVariable: 'CML_USERNAME', passwordVariable: 'CML_PASSWORD')]) {
+						echo "Executing curl command to retrieve API token..."
+						def commandRetrieve = "curl -k -s -X POST \"${CML_URL}/api/v0/authenticate\" " +
+																	"-H \"Content-Type: application/json\" " +
+																	"-d '{\"username\": \"${CML_USERNAME}\", \"password\": \"${CML_PASSWORD}\"}'"
+						def token = sh(script: commandRetrieve, returnStdout: true).trim()
+						if (token == '' || token.contains('Error') || token.startsWith('null')) {
+								error "Failed to retrieve API token: ${token}"
+						} else {
+								echo "API Token retrieved successfully: ${token}"
+								// Remove quotes and update the environment variable
+								env.API_TOKEN = token.replaceAll('\"', '')
+								writeFile file: 'token.txt', text: "API Token: ${env.API_TOKEN}"
+
+								// Using the API token to make a test API call
+								echo "Using API token to make an authenticated API call..."
+								def commandUseToken = "curl -k -X GET ${CML_URL}/api/v0/authok " +
+																			"-H 'accept: application/json' " +
+																			"-H 'Authorization: Bearer ${env.API_TOKEN}' " +
+																			"-o response.json"
+								sh script: commandUseToken
+								echo "Response from API call:"
+								sh "cat response.json"
+						}
+        	}
+      }
+    }
+  }
+        
+
+  // This stage will check if the .qcow2 file already exists in CML. If it does, it will skip uploading it.      
+  stage('Check and Handle QCOW2 Artifact') {
+    steps {
+      script {
+				withCredentials([usernamePassword(credentialsId: 'jenkins-api-token', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN'),
+				                 usernamePassword(credentialsId: 'cml_credentials', usernameVariable: 'CML_USERNAME', passwordVariable: 'CML_PASSWORD')]) {
+						// Retrieve the name of the most recent successful QCOW2 artifact from qcow-create
+						env.FILE = sh(script: """
+								curl -s '${JENKINS_URL}/job/cml-qcow-create/lastSuccessfulBuild/api/json' \\
+								--user ${JENKINS_USER}:${JENKINS_TOKEN} | jq -r '.artifacts[] | select(.fileName | endswith(".qcow2")) | .fileName'
+						""", returnStdout: true).trim()
+
+						env.IMAGE_NAME = env.FILE.replaceAll('.qcow2', '')
+
+						// Check if this image already exists in CML
+						def imageExists = false
+						def imagesJson = sh(script: """
+								curl -k -s -X GET '${env.CML_URL}/api/v0/node_definitions/${env.NODE_DEFINITION}/image_definitions' \\
+								-H 'Content-Type: application/json' \\
+								-H 'Authorization: Bearer ${env.API_TOKEN}'
+						""", returnStdout: true).trim()
+						def images = readJSON text: imagesJson
+
+						images.each { image ->
+								if (image.disk_image == env.FILE) {
+										imageExists = true
+										echo "${env.FILE} already exists in CML. Skipping download and SCP."
+								}
+						}
+
+						if (!imageExists) {
+								echo "No existing image found. Proceeding with download and SCP."
+								// Download the .qcow2 from Jenkins
+								sh "curl -s -O '${JENKINS_URL}/job/cml-qcow-create/lastSuccessfulBuild/artifact/${env.FILE}' --user ${JENKINS_USER}:${JENKINS_TOKEN}"
+
+								// SCP Upload to CML Server
+								sh """
+										echo "Uploading ${env.FILE} to CML server..."
+										sshpass -p '${env.CML_PASSWORD}' scp -o StrictHostKeyChecking=no ${env.FILE} ${env.CML_USERNAME}@${env.CML_HOST}:/
+										if [ \$? -eq 0 ]; then
+												echo "${env.FILE} successfully uploaded to CML server."
+										else
+												echo "Failed to upload ${env.FILE} to CML server."
+												exit 1
+										fi
+								"""
+						}
+          }
+        }
+      }
+  }
+
+  stage('Update Node Definitions') {
+    steps {
+      script {
+				env.LABEL_PREFIX = "${env.NODE_DEFINITION}-"
+				echo "Running Scripts with the following variables:"
+				echo "CML URL: ${env.CML_URL}"
+				echo "Node Definition: ${env.NODE_DEFINITION}"
+				echo "Label Prefix: ${env.LABEL_PREFIX}"
+        
+				// Plugin to pull the .json template for the node and fill in the information.            
+				configFileProvider([configFile(fileId: "${env.NODE_DEF_ID}", variable: 'NODE_DEFINITION_JSON')]) {
+					def payload = readJSON file: env.NODE_DEFINITION_JSON
+					payload.id = env.NODE_DEFINITION
+					payload.general.description = env.NODE_DEFINITION
+					payload.ui.label = env.NODE_DEFINITION
+					payload.ui.label_prefix = env.LABEL_PREFIX
+        
+          // Serialize JSON payload to string
+					def jsonPayload = new groovy.json.JsonBuilder(payload).toString()
+					
+					//Uncomment the two lines below for troubleshooting. This will show you the full API payload.
+					echo "Sending the following JSON payload for Node Definition to CML:"
+					echo jsonPayload
+        
+					// Prepare curl command to send JSON payload
+					def postCommand = """
+					curl -k -X POST ${env.CML_URL}/api/v0/node_definitions \\
+					-H 'Content-Type: application/json' \\
+					-H 'Authorization: Bearer ${env.API_TOKEN}' \\
+					-d '${jsonPayload}' \\
+					-o response.json
+					"""
+					sh script: postCommand
+        
+					// Read and log the response
+					def responseContent = readFile('response.json').trim()
+					echo "Response from POST CML:"
+					echo responseContent
+        
+					// Handle non-JSON responses
+					def responseJson
+					try {
+							responseJson = readJSON text: responseContent
+					} catch (Exception e) {
+							echo "Failed to parse JSON response: ${e.message}"
+							echo "Assuming critical failure and stopping execution."
+							return
+					}
+        
+					// Handle existing node definition
+					if (responseJson.code == 400) {
+							echo "Node already exists. Attempting to update the existing node..."
+							def putCommand = """
+							curl -k -X PUT ${env.CML_URL}/api/v0/node_definitions \\
+							-H 'Content-Type: application/json' \\
+							-H 'Authorization: Bearer ${env.API_TOKEN}' \\
+							-d '${jsonPayload}' \\
+							-o response.json
+							"""
+							sh script: putCommand
+        
+					// Read and log the PUT response
+					def putResponseContent = readFile('response.json').trim()
+					echo "Response from PUT CML:"
+					echo putResponseContent
+        
+							try {
+									def putResponseJson = readJSON text: putResponseContent
+									if (putResponseJson.status && (putResponseJson.status == 200 || putResponseJson.status == 201)) {
+											echo "Node definition updated successfully."
+									} else {
+											echo "Failed to update node definition: ${putResponseJson.description}"
+									}
+							} catch (Exception e) {
+									echo "Failed to parse PUT JSON response: ${e.message}"
+							}
+					} else if (responseJson.status && (responseJson.status == 200 || responseJson.status == 201)) {
+							echo "Node definition created or updated successfully."
+					} else {
+							echo "Failed to create or update node definition."
+					}
+        }
+      }
+    }
+  }
+
+      
+	//This stage will update the image definition with the newest software image.
+	stage('Update Image Definition') {
+    steps {
+      script {
+        echo "Running Scripts with the following variables:"
+        echo "CML URL: ${env.CML_URL}"
+        echo "Target Lab: ${env.CML_LAB}"
+        echo "Target Node: ${env.NODE_DEFINITION}"
+        echo "New Image: ${env.IMAGE_NAME}"
+            
+        configFileProvider([configFile(fileId: "${env.IMAGE_DEF_ID}", variable: 'IMAGE_DEFINITION_JSON')]) {
+          def payload = readJSON file: env.IMAGE_DEFINITION_JSON
+          payload.id = env.IMAGE_NAME
+          payload.node_definition_id = env.NODE_DEFINITION
+          payload.description = env.IMAGE_NAME
+          payload.label = env.IMAGE_NAME
+          payload.disk_image = env.FILE
+
+          def jsonPayload = new groovy.json.JsonBuilder(payload).toString()
+
+          echo "Sending the following JSON payload for Image Definition to CML:"
+          echo jsonPayload
+
+          def command = """
+          curl -k -X POST '${env.CML_URL}/api/v0/image_definitions' \\
+          -H 'Content-Type: application/json' \\
+          -H 'Authorization: Bearer ${env.API_TOKEN}' \\
+          -d '${jsonPayload}' \\
+          -o response.json
+          """
+          sh script: command
+
+          def responseContent = readFile('response.json').trim()
+          echo "Response from POST CML:"
+          echo responseContent
+
+          def responseJson
+          try {
+            responseJson = readJSON text: responseContent
+            if (responseJson.code == 400) {
+              echo "Image already exists. Attempting to update the existing definition..."
+              def putCommand = """
+              curl -k -X PUT '${env.CML_URL}/api/v0/image_definitions/${env.IMAGE_NAME}' \\
+              -H 'Content-Type: application/json' \\
+              -H 'Authorization: Bearer ${env.API_TOKEN}' \\
+              -d '${jsonPayload}' \\
+              -o response.json
+              """
+              sh script: putCommand
+
+              def putResponseContent = readFile('response.json').trim()
+              echo "Response from PUT CML:"
+              echo putResponseContent
+
+              try {
+                def putResponseJson = readJSON text: putResponseContent
+                if (putResponseJson.status == 200 || putResponseJson.status == 201) {
+                  echo "Image definition updated successfully."
+                } else {
+                  echo "Failed to update image definition: ${putResponseJson.description}"
+                }
+              } catch (Exception e) {
+                echo "Failed to parse PUT JSON response: ${e.message}"
+              }
+            } else if (responseJson.status == 200 || responseJson.status == 201) {
+              echo "Image definition created or updated successfully."
+            } else {
+              echo "Failed to create or update image definition."
+            }
+          } catch (Exception e) {
+            echo "Failed to parse JSON response: ${e.message}"
+            echo "Response Content: ${responseContent}"
+            echo "Assuming critical failure and stopping execution."
+            return
+          }
+        }
+      }
+    }
+  }
+        
+  stage('Update Lab Nodes') {
+    steps {
+        script {
+            echo "Starting the process to update lab nodes with the following settings:"
+            echo "Lab Title: ${env.CML_LAB}"
+            echo "Node Definition Filter: ${env.NODE_DEFINITION}"
+            echo "Image Name: ${env.IMAGE_NAME}"
+
+            // Function to execute a curl command and parse JSON output
+            def executeCurlJson = { command ->
+                def output = sh(script: command, returnStdout: true).trim()
+                echo "CURL Output: ${output}"  // Debug output
+                return output
+            }
+
+            // Fetch lab ID based on the lab title
+            def labId = null
+            def labsJson = executeCurlJson("""
+                curl -k -s -X GET '${env.CML_URL}/api/v0/populate_lab_tiles' \\
+                -H 'Content-Type: application/json' \\
+                -H 'Authorization: Bearer ${env.API_TOKEN}'
+            """)
+            def labs = readJSON text: labsJson
+            labs.lab_tiles.each { id, details ->
+                if (details.lab_title?.trim() == env.CML_LAB.trim()) {
+                    labId = id
+                    echo "Found lab: ${env.CML_LAB} with ID: ${labId}"
+                }
+            }
+
+            if (labId) {
+                echo "Lab ID ${labId} will be used for further API calls."
+
+                // Fetch nodes based on the node definition filter
+                def nodesJson = executeCurlJson("""
+                    curl -k -s -X GET '${env.CML_URL}/api/v0/labs/${labId}/nodes?data=true&operational=true' \\
+                    -H 'Authorization: Bearer ${env.API_TOKEN}'
+                """)
+                def nodes = readJSON text: nodesJson
+
+                nodes.each { node ->
+                    if (node.node_definition == env.NODE_DEFINITION) {
+                        echo "Processing node ID ${node.id} with state ${node.state}"
+
+                        // Check if the node already has the desired image definition
+                        if (node.image_definition == env.IMAGE_NAME) {
+                            echo "Node ID ${node.id} already has the image definition ${env.IMAGE_NAME}. Skipping update."
+                            return
+                        }
+
+                        // Stop the node if it's booted
+                        if (node.state == 'BOOTED') {
+                            executeCurlJson("""
+                                curl -k -s -X PUT '${env.CML_URL}/api/v0/labs/${labId}/nodes/${node.id}/state/stop' \\
+                                -H 'Authorization: Bearer ${env.API_TOKEN}'
+                            """)
+                            sleep 2 // Small delay to ensure the node has stopped
+                        }
+
+                        // Wipe disks
+                        executeCurlJson("""
+                            curl -k -s -X PUT '${env.CML_URL}/api/v0/labs/${labId}/nodes/${node.id}/wipe_disks' \\
+                            -H 'Authorization: Bearer ${env.API_TOKEN}'
+                        """)
+
+                        // Update image definition
+                        executeCurlJson("""
+                            curl -k -s -X PATCH '${env.CML_URL}/api/v0/labs/${labId}/nodes/${node.id}' \\
+                            -H 'Content-Type: application/json' \\
+                            -H 'Authorization: Bearer ${env.API_TOKEN}' \\
+                            -d '{"image_definition": "${env.IMAGE_NAME}"}'
+                        """)
+
+                        // Start the node
+                        executeCurlJson("""
+                            curl -k -s -X PUT '${env.CML_URL}/api/v0/labs/${labId}/nodes/${node.id}/state/start' \\
+                            -H 'Authorization: Bearer ${env.API_TOKEN}'
+                        """)
+                    }
+                }
+                echo "All targeted nodes have been processed with new image definitions and started."
+            } else {
+                echo "Failed to find the lab with title ${env.CML_LAB}. Please check your configuration."
+            }
+        }
+    }
+}
+} 
+post {
+  always {
+    cleanWs()
+    }
+  }
+}
